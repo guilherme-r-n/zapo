@@ -193,6 +193,7 @@ export class WaCallManager extends EventEmitter {
         }
 
         const callCreator = nodeInfo.innerNode.attrs?.['call-creator'] || peerJid
+        const callerPn = nodeInfo.innerNode.attrs?.['caller_pn']
         const isVideo = hasNodeChild(nodeInfo.innerNode, 'video')
 
         const callKey = await decryptCallKey(
@@ -207,7 +208,7 @@ export class WaCallManager extends EventEmitter {
         )
 
         const mediaType = isVideo ? CallMediaType.Video : CallMediaType.Audio
-        const info = CallInfo.newIncoming(callId, peerJid, callCreator, undefined, mediaType)
+        const info = CallInfo.newIncoming(callId, peerJid, callCreator, callerPn, mediaType)
 
         if (callKey) {
             info.encryptionKey = callKey
