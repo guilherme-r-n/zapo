@@ -32,6 +32,8 @@ function createSession(useOriginalRelayPort = false): {
             emitIncoming: () => {},
             emitEnded: () => {},
             emitInboundAudio: () => {},
+            emitInboundVideoRtp: () => {},
+            emitInboundVideo: () => {},
             emitOutboundAudioFinished: () => {}
         } satisfies WaCallMediaSessionDelegate
     })
@@ -43,6 +45,8 @@ function createSession(useOriginalRelayPort = false): {
                 configureRelays: (relays: ConfiguredRelay[]) => Promise<void>
                 setSsrc: (ssrc: number) => void
                 setSubscriptionSsrc: (ssrc: number) => void
+                setStreamSsrcs: (selfSsrcs: number[], peerSsrcs: number[]) => void
+                setParticipantIds: (selfPid?: number, peerPid?: number) => void
                 getConnectedCount: () => number
             }
         }
@@ -52,6 +56,8 @@ function createSession(useOriginalRelayPort = false): {
         },
         setSsrc: () => {},
         setSubscriptionSsrc: () => {},
+        setStreamSsrcs: () => {},
+        setParticipantIds: () => {},
         getConnectedCount: () => 0
     }
 

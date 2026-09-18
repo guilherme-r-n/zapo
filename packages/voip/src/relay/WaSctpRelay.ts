@@ -28,6 +28,7 @@ function closeQuietly(closeable: { close(): void } | null | undefined, logger: L
 }
 
 type PeerConnectionClass = RTCPeerConnection
+
 type DataChannelClass = RTCDataChannel
 
 /**
@@ -116,6 +117,10 @@ export class WaSctpRelay extends EventEmitter {
     private keepaliveTimers = new Map<string, NodeJS.Timeout>()
     private audioSsrc = 0
     private subscriptionSsrc = 0
+    private selfStreamSsrcs: number[] = []
+    private peerStreamSsrcs: number[] = []
+    private selfPid = 0
+    private peerPid = 0
 
     constructor(options: WaSctpRelayOptions = {}) {
         super()
@@ -132,6 +137,30 @@ export class WaSctpRelay extends EventEmitter {
         this.logger.debug('sctp subscription ssrc set', {
             ssrc: `0x${ssrc.toString(16).padStart(8, '0')}`
         })
+    }
+
+    setStreamSsrcs(selfSsrcs: number[], peerSsrcs: number[]): void {
+        this.selfStreamSsrcs = selfSsrcs.filter(Boolean)
+        this.peerStreamSsrcs = peerSsrcs.filter(Boolean)
+        this.logger.debug('sctp relay stream ssrcs set', {
+            selfCount: this.selfStreamSsrcs.length,
+            peerCount: this.peerStreamSsrcs.length
+        })
+    }
+
+    setParticipantIds(selfPid?: number, peerPid?: number): void {
+        const nextSelfPid = selfPid ?? 0
+        const nextPeerPid = peerPid ?? 0
+        const changed = nextSelfPid !== this.selfPid || nextPeerPid !== this.peerPid
+        this.selfPid = nextSelfPid
+        this.peerPid = nextPeerPid
+        this.logger.debug('sctp participant ids set', {
+            selfPid: this.selfPid,
+            peerPid: this.peerPid
+        })
+        if (changed && this.selfPid && this.peerPid && this.hasConnection()) {
+            this.resendSubscriptions()
+        }
     }
 
     resendSubscriptions(): void {
@@ -520,8 +549,11 @@ export class WaSctpRelay extends EventEmitter {
                 return
             }
 
+            // The legacy subscription requests carry only the primary inbound
+            // stream. Multi-stream audio/video subscriptions belong to the v4
+            // allocation below; repeating v1-v3 for every slot causes some
+            // relays to accept the uplink without forwarding the peer stream.
             const subs = buildSenderSubscriptions(ssrc)
-
             if (localUfrag) {
                 const username = TEXT_ENCODER.encode(`${remoteUfrag}:${localUfrag}`)
                 const v1 = buildBindingRequestWithSubs(username, hmacKey, subs, true, true)
@@ -550,8 +582,18 @@ export class WaSctpRelay extends EventEmitter {
             this.logger.trace('stun v3 no-mi sent', { connectionId, label, size: v3.length })
 
             if (relayInfo.rawToken && relayInfo.rawToken.length > 0) {
-                const peerSsrcs = peerSsrc ? [peerSsrc] : []
-                const ssrcList = buildSSRCSubscriptionList([selfSsrc], peerSsrcs, 0, 0)
+                const selfSsrcs = this.selfStreamSsrcs.length ? this.selfStreamSsrcs : [selfSsrc]
+                const peerSsrcs = this.peerStreamSsrcs.length
+                    ? this.peerStreamSsrcs
+                    : peerSsrc
+                      ? [peerSsrc]
+                      : []
+                const ssrcList = buildSSRCSubscriptionList(
+                    selfSsrcs,
+                    peerSsrcs,
+                    this.selfPid,
+                    this.peerPid
+                )
                 const v4 = buildAllocateForRelay(
                     relayInfo.rawToken,
                     ssrcList,
@@ -1027,6 +1069,10 @@ export class WaSctpRelay extends EventEmitter {
         this.stats.connected = 0
         this.audioSsrc = 0
         this.subscriptionSsrc = 0
+        this.selfStreamSsrcs = []
+        this.peerStreamSsrcs = []
+        this.selfPid = 0
+        this.peerPid = 0
         this.pongCount = 0
         this.rtpRecvCount = 0
         this.unknownRecvCount = 0
