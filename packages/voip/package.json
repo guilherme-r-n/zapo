@@ -1,6 +1,6 @@
 {
     "name": "@zapo-js/voip",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "WhatsApp VOIP (calling) plugin for zapo-js — MLow/WASM codec, SRTP, STUN and WebRTC/SCTP relay transport",
     "license": "MIT",
     "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",

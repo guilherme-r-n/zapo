@@ -1,5 +1,16 @@
 # zapo-js
 
+## 1.9.0
+
+### Minor Changes
+
+- Honour a configured HTTP proxy on the mobile transport after SMS registration. `buildCommsConfig` dropped `socketOptions.proxy.ws` whenever it was not an `http.Agent`-style proxy holding an `http:` url, so a mobile session silently dialled `g.whatsapp.net` directly instead of tunneling through it. The tunnel endpoint now resolves in `@transport/proxy`, and `connect()` fails with an actionable message for undici dispatchers, socks agents, non-http proxy urls and agents carrying no endpoint at all. The CONNECT header cap also applies when the terminator lands past the limit - the check only ran on the incomplete-buffer branch, so an oversized header that did terminate opened the tunnel anyway. A proxy password holding a literal `%` no longer surfaces a bare `URIError` through `buildCommsConfig`: both userinfo components decode behind a guard that names the field without echoing the credential. `WaTcpProxyEndpoint` is tagged `@sensitive`, since it carries the proxy authorization header and must not be logged or serialized.
+- Support iOS in the mobile-primary login payload. The mobile login `ClientPayload` hardcoded an `ANDROID` / `SMB_ANDROID` `UserAgent`, so only phones registered through Android could log in over the mobile transport. `WaMobileTransportDeviceInfo` gains an `os` discriminator (default `android`, byte-identical to before) plus an iOS `distributionChannel`, and the `UserAgent` build branches on it: iOS advertises `IOS` / `SMB_IOS`, omits the Android-only `mcc`, `mnc` and `deviceBoard` fields, and carries `distributionChannel`. iOS keeps the marketing name in `device` and the raw machine id in `deviceModelType`, matching the real client.
+
+### Patch Changes
+
+- Classify the AI rich-response family as text so the stanza delivers. `botForwardedMessage` and `richResponseMessage` fell through to the media default, and the server silently drops a media stanza carrying no `mediatype` - these messages acked ok and never arrived. `unwrapMessage` now descends `botForwardedMessage` so the inner message decides the type (a forwarded image stays media with its `mediatype`), and the text list covers `richResponseMessage` plus the bare `botForwardedMessage` wrapper.
+
 ## 1.8.2
 
 ### Patch Changes
