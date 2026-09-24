@@ -291,6 +291,7 @@ export class WaCallManager extends EventEmitter {
                 const creds = this.deps.authClient.getCurrentCredentials()
                 const selfLid = creds?.meLid || creds?.meJid || ''
                 const peerDeviceJids = await this.resolvePeerDeviceJids(peerJid)
+                if (this.endedDuringSetup(session)) return
                 if (info.relayData) {
                     info.relayData.participantJids = [
                         ...peerDeviceJids,
@@ -303,9 +304,11 @@ export class WaCallManager extends EventEmitter {
                     ? peerDeviceJids.find((jid) => /:[1-9]\d*@/.test(jid)) || peerJid
                     : peerJid
                 await session.initMedia(selfLid, mediaPeerJid)
+                if (this.endedDuringSetup(session)) return
                 await session.sendIncomingPreaccept(peerJid)
                 await session.sendIncomingRelayLatency()
             } catch (err) {
+                if (this.endedDuringSetup(session)) return
                 this.logger.error('incoming call activation failed', {
                     callId,
                     message: toError(err).message
@@ -331,6 +334,7 @@ export class WaCallManager extends EventEmitter {
                 maxConcurrentCalls: this.maxConcurrentCalls
             })
         }
+        if (this.endedDuringSetup(session)) return
 
         this.emit('call_incoming', info)
         this.emitState(info)
@@ -676,6 +680,7 @@ export class WaCallManager extends EventEmitter {
         const selfLid = creds?.meLid || creds?.meJid || ''
 
         const peerDeviceJids = await this.resolvePeerDeviceJids(session.info.peerJid)
+        if (this.endedDuringSetup(session)) return
         if (session.info.relayData) {
             session.info.relayData.participantJids = [
                 ...peerDeviceJids,
@@ -689,11 +694,23 @@ export class WaCallManager extends EventEmitter {
                 ? peerDeviceJids.find((jid) => /:[1-9]\d*@/.test(jid)) || session.info.peerJid
                 : session.info.peerJid
         await session.initMedia(selfLid, mediaPeerJid)
+        if (this.endedDuringSetup(session)) return
         await session.sendIncomingPreaccept(session.info.peerJid)
         await session.sendIncomingRelayLatency()
+        if (this.endedDuringSetup(session)) return
 
         this.emitState(session.info)
 
         this.logger.debug('waiting incoming call unblocked', { callId: session.callId })
+    }
+
+    /**
+     * Whether a `<terminate>` or `<accept>` handled concurrently ended the call mid-setup; that
+     * path already reported the end, so setup stops and cleans up again.
+     */
+    private endedDuringSetup(session: WaCallMediaSession): boolean {
+        if (!session.info.isEnded) return false
+        session.cleanup()
+        return true
     }
 }
