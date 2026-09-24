@@ -345,10 +345,15 @@ export class WaCallManager extends EventEmitter {
         })
     }
 
+    /** An `<accept>` on an incoming call ends it (answered elsewhere) and frees its slot. */
     async handleCallAccept(node: BinaryNode, peerJid: string): Promise<void> {
         const session = this.resolveSessionFromNode(node)
         if (!session) return
         await session.handleCallAccept(node, peerJid)
+        if (session.info.isEnded) {
+            this.calls.delete(session.callId)
+            await this.maybeUnblockWaitingCalls()
+        }
     }
 
     async handleCallPreaccept(node: BinaryNode, peerJid: string): Promise<void> {
@@ -436,7 +441,7 @@ export class WaCallManager extends EventEmitter {
             })
             return
         }
-        session.handleCallTerminate()
+        session.handleCallTerminate(action?.attrs?.reason)
         this.calls.delete(session.callId)
         await this.maybeUnblockWaitingCalls()
     }

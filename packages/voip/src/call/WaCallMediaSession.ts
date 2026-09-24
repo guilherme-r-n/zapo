@@ -711,7 +711,16 @@ export class WaCallMediaSession {
         }
     }
 
+    /**
+     * On a call this device is receiving, an `<accept>` is another device of this account
+     * picking it up: a ringing call ends here as accepted elsewhere and nothing is sent.
+     */
     async handleCallAccept(node: BinaryNode, peerJid: string): Promise<void> {
+        if (this.info.direction === CallDirection.Incoming) {
+            if (this.info.isRinging) this.handleCallTerminate('accepted_elsewhere')
+            return
+        }
+
         const nodeInfo = extractNodeInfo(node)
         if (!nodeInfo) return
 
@@ -1775,11 +1784,20 @@ export class WaCallMediaSession {
         return this.media.snapshot()
     }
 
-    handleCallTerminate(): void {
+    /**
+     * `reason` is the `<terminate>` reason. Only an incoming call keeps the elsewhere reasons:
+     * on an outgoing one `accepted_elsewhere` comes from the peer's companions.
+     */
+    handleCallTerminate(reason?: string): void {
+        let endReason = EndCallReason.UserEnded
+        if (this.info.direction === CallDirection.Incoming) {
+            if (reason === 'accepted_elsewhere') endReason = EndCallReason.AcceptedElsewhere
+            else if (reason === 'rejected_elsewhere') endReason = EndCallReason.RejectedElsewhere
+        }
         try {
             this.info.applyTransition({
                 type: 'terminated',
-                reason: EndCallReason.UserEnded
+                reason: endReason
             })
         } catch (err) {
             this.logger.trace('call transition skipped', { message: toError(err).message })

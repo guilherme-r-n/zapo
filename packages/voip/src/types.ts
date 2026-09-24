@@ -40,7 +40,11 @@ export enum EndCallReason {
     /** The call had a media path and lost it, with no leg left to carry it. */
     RelayLost = 'relay_lost',
     DoNotDisturb = 'do_not_disturb',
-    Unknown = 'unknown'
+    Unknown = 'unknown',
+    /** Another device of this account answered the incoming call. */
+    AcceptedElsewhere = 'accepted_elsewhere',
+    /** Another device of this account declined the incoming call. */
+    RejectedElsewhere = 'rejected_elsewhere'
 }
 
 export type CallTransition =
