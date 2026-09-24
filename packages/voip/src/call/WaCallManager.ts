@@ -257,6 +257,7 @@ export class WaCallManager extends EventEmitter {
                 await session.initMedia(selfLid, mediaPeerJid)
                 if (this.endedDuringSetup(session)) return
                 await session.sendIncomingPreaccept(peerJid)
+                if (this.endedDuringSetup(session)) return
                 await session.sendIncomingRelayLatency()
             } catch (err) {
                 if (this.endedDuringSetup(session)) return
@@ -563,6 +564,7 @@ export class WaCallManager extends EventEmitter {
         await session.initMedia(selfLid, mediaPeerJid)
         if (this.endedDuringSetup(session)) return
         await session.sendIncomingPreaccept(session.info.peerJid)
+        if (this.endedDuringSetup(session)) return
         await session.sendIncomingRelayLatency()
         if (this.endedDuringSetup(session)) return
 

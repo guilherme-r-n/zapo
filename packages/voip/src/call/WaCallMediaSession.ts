@@ -826,6 +826,8 @@ export class WaCallMediaSession implements AudioSender {
         const seenRelayNames = new Set<string>()
 
         for (const ep of this.info.relayData.endpoints) {
+            // One send per relay: the call can end while an earlier one is in flight.
+            if (this.info.isEnded) return
             const name = ep.relayName || ''
             if (!name || seenRelayNames.has(name)) continue
             seenRelayNames.add(name)
