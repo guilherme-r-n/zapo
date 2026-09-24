@@ -103,6 +103,28 @@ function callIdOf(node: BinaryNode): string | undefined {
         : undefined
 }
 
+function tagsSentFor(sent: readonly BinaryNode[], callId: string): string[] {
+    return sent
+        .filter((node) => callIdOf(node) === callId)
+        .map((node) => (node.content as BinaryNode[])[0].tag)
+}
+
+/** Holds peer device resolution, the first await of incoming call setup, until released. */
+function holdDeviceSync(deps: WaVoipDeps): () => void {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+        release = resolve
+    })
+    const sync = deps.signalDeviceSync as unknown as { syncDeviceList: () => Promise<unknown> }
+    sync.syncDeviceList = async () => {
+        await gate
+        return [{ deviceJids: ['2222222222:0@lid'] }]
+    }
+    return release
+}
+
+const settle = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
+
 test('WaCallManager rejects invalid maxConcurrentCalls', () => {
     const { deps, stores } = createMockDeps()
     assert.throws(
@@ -294,6 +316,56 @@ test('an accept on an incoming call ends it as accepted elsewhere and frees its 
         []
     )
     assert.equal(manager.getCall(waitingId)!.canAccept, true)
+})
+
+test('an incoming call ended while it is still being set up is never announced', async () => {
+    for (const ending of ['accept', 'terminate'] as const) {
+        const { deps, stores, sent } = createMockDeps()
+        const release = holdDeviceSync(deps)
+        const manager = new WaCallManager({ deps, stores, maxConcurrentCalls: 1 })
+        const callId = 'CA11CA11000000000000000000000030'
+        const announced: CallInfo[] = []
+        manager.on('call_incoming', (call) => announced.push(call))
+
+        const offer = manager.handleCallOffer(buildOfferNode(callId), '2222222222:0@lid')
+        await settle()
+        const call = manager.getCall(callId)
+        assert.ok(call)
+        if (ending === 'accept') {
+            await manager.handleCallAccept(
+                buildAcceptNode(callId, '1111111111:1@lid', '2222222222:0@lid'),
+                '1111111111:1@lid'
+            )
+        } else {
+            await manager.handleCallTerminate(buildTerminateNode(callId))
+        }
+        release()
+        await offer
+
+        assert.equal(manager.getCall(callId), null, ending)
+        assert.equal(call.isEnded, true, ending)
+        assert.deepEqual(announced, [], ending)
+        assert.deepEqual(tagsSentFor(sent, callId), [], ending)
+    }
+})
+
+test('a waiting call ended while its freed slot is being activated is never preaccepted', async () => {
+    const { deps, stores, sent } = createMockDeps()
+    const manager = new WaCallManager({ deps, stores, maxConcurrentCalls: 1 })
+    const activeCallId = await manager.startCall({ peerJid: '2222222222@lid' })
+    const waitingId = 'CA11CA11000000000000000000000031'
+    await manager.handleCallOffer(buildOfferNode(waitingId, '3333333333:0@lid'), '3333333333:0@lid')
+    assert.equal(manager.getCall(waitingId)!.canAccept, false)
+
+    const release = holdDeviceSync(deps)
+    const freeing = manager.endCall(activeCallId)
+    await settle()
+    await manager.handleCallTerminate(buildTerminateNode(waitingId, '3333333333:0@lid'))
+    release()
+    await freeing
+
+    assert.equal(manager.getCall(waitingId), null)
+    assert.deepEqual(tagsSentFor(sent, waitingId), [])
 })
 
 test('call_inbound_audio event includes CallInfo', async () => {
