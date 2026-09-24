@@ -3,6 +3,7 @@ export type { WaAppDataPayload, WaCallArEffect, WaCallReaction } from './app-dat
 export { WA_APP_DATA_PAYLOAD_TYPE, WaAppDataStream } from './app-data/WaAppDataStream.js'
 export type { WaAppDataStreamOptions } from './app-data/WaAppDataStream.js'
 
+export { dialableRelayEndpoints } from './call/plan.js'
 export type {
     WaCallMediaKeys,
     WaCallMediaPlan,

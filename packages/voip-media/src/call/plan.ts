@@ -50,6 +50,26 @@ export interface WaCallMediaRelays {
     readonly peerPid?: number
 }
 
+/**
+ * The endpoints the plane dials: UDP only (protocol 0), the first per advertised
+ * `ip:port`, and of those only the ones carrying a key and a raw token.
+ */
+export function dialableRelayEndpoints<
+    T extends Pick<WaCallMediaRelay, 'ip' | 'port' | 'protocol' | 'key' | 'rawToken'>
+>(endpoints: readonly T[]): T[] {
+    const seen = new Set<string>()
+    const unique: T[] = []
+    for (const ep of endpoints) {
+        if ((ep.protocol ?? 0) !== 0) continue
+        const key = `${ep.ip}:${ep.port}`
+        if (!seen.has(key)) {
+            seen.add(key)
+            unique.push(ep)
+        }
+    }
+    return unique.filter((ep) => ep.key && ep.rawToken)
+}
+
 /** The call's SSRCs, derived by signaling from the call id, a device jid and a slot. */
 export interface WaCallMediaSsrcs {
     readonly selfAudio: number

@@ -41,14 +41,15 @@ import {
     SRTP_SEND_AUTH_TAG_LEN
 } from '../types.js'
 
-import type {
-    WaCallMediaKeys,
-    WaCallMediaPlanUpdate,
-    WaCallMediaRelay,
-    WaCallMediaRelays,
-    WaCallMediaSettings,
-    WaCallMediaSsrcs,
-    WaCallMediaVideo
+import {
+    dialableRelayEndpoints,
+    type WaCallMediaKeys,
+    type WaCallMediaPlanUpdate,
+    type WaCallMediaRelay,
+    type WaCallMediaRelays,
+    type WaCallMediaSettings,
+    type WaCallMediaSsrcs,
+    type WaCallMediaVideo
 } from './plan.js'
 
 /**
@@ -1580,41 +1581,28 @@ export class WaCallMediaPlane {
     private async connectRelays(relays: WaCallMediaRelays): Promise<void> {
         this.logger.debug('connecting relays', { endpointCount: relays.endpoints.length })
 
-        const seen = new Set<string>()
-        const uniqueEndpoints: WaCallMediaRelay[] = []
-        for (const ep of relays.endpoints) {
-            if ((ep.protocol ?? 0) !== 0) continue
-            const key = `${ep.ip}:${ep.port}`
-            if (!seen.has(key)) {
-                seen.add(key)
-                uniqueEndpoints.push(ep)
-            }
-        }
-
         // A relay answers only on the port it advertises, and the endpoints
         // carry a mix. WhatsApp Web dials them all on the web client port and
         // keeps the advertised one as `originalPort`, gating the alternative
         // behind `shouldUseOriginalRelayPort`; this mirrors both sides of that.
         const dialPort = (ep: WaCallMediaRelay): number =>
             this.useOriginalRelayPort ? ep.port : TRUE_WEB_CLIENT_RELAY_PORT
-        const configs = uniqueEndpoints
-            .filter((ep) => ep.key && ep.rawToken)
-            .map((ep) => ({
-                ip: ep.ip,
-                port: dialPort(ep),
-                token: ep.token,
-                authToken: ep.authToken,
-                rawAuthToken: ep.rawAuthToken,
-                rawToken: ep.rawToken,
-                key: ep.key,
-                relayId: ep.relayId,
-                name: ep.name || `${ep.ip}:${dialPort(ep)}`,
-                authTokenId: ep.authTokenId,
-                // The port the relay advertised for itself, kept alongside the
-                // dialled one so a raw UDP leg can reach the relay where it
-                // says it listens instead of on the web client's rewrite.
-                originalPort: ep.port
-            }))
+        const configs = dialableRelayEndpoints(relays.endpoints).map((ep) => ({
+            ip: ep.ip,
+            port: dialPort(ep),
+            token: ep.token,
+            authToken: ep.authToken,
+            rawAuthToken: ep.rawAuthToken,
+            rawToken: ep.rawToken,
+            key: ep.key,
+            relayId: ep.relayId,
+            name: ep.name || `${ep.ip}:${dialPort(ep)}`,
+            authTokenId: ep.authTokenId,
+            // The port the relay advertised for itself, kept alongside the
+            // dialled one so a raw UDP leg can reach the relay where it
+            // says it listens instead of on the web client's rewrite.
+            originalPort: ep.port
+        }))
 
         if (configs.length === 0) {
             this.logger.error('no relay configs')
