@@ -671,6 +671,7 @@ export class WaCallMediaSession {
         }
     }
 
+    /** One send per relay, stopping once the call has ended: it can end between two sends. */
     async sendIncomingRelayLatency(): Promise<void> {
         if (!this.info.relayData) return
 
@@ -681,6 +682,7 @@ export class WaCallMediaSession {
         const seenRelayNames = new Set<string>()
 
         for (const ep of this.info.relayData.endpoints) {
+            if (this.info.isEnded) return
             const name = ep.relayName || ''
             if (!name || seenRelayNames.has(name)) continue
             seenRelayNames.add(name)

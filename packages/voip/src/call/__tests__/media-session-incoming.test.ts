@@ -158,3 +158,35 @@ test('relaylatency naming only relays we were never given is not answered', asyn
 
     assert.equal(sent.length, 0)
 })
+
+test('incoming relaylatency stops once the call ends between relays', async () => {
+    const call = CallInfo.newIncoming(ID, 'peer@lid', 'peer@lid', undefined, CallMediaType.Audio)
+    call.relayData = {
+        endpoints: [
+            endpoint({ ip: '10.0.0.1', relayName: 'gru1c01' }),
+            endpoint({ ip: '10.0.0.2', relayName: 'bsb1c01' })
+        ],
+        participantJids: ['peer:0@lid']
+    }
+    const sent: BinaryNode[] = []
+    const session: WaCallMediaSession = new WaCallMediaSession({
+        deps: {
+            authClient: { getCurrentCredentials: () => ({ meJid: 'me@s.whatsapp.net' }) },
+            lowLevelCoordinator: {
+                sendNode: async (node: BinaryNode) => {
+                    sent.push(node)
+                    // The peer hangs up while the first relaylatency is in flight.
+                    session.handleCallTerminate()
+                }
+            }
+        } as unknown as WaVoipDeps,
+        logger: createNoopLogger(),
+        info: call,
+        createMediaLink: recordMediaLink().createMediaLink,
+        delegate: createSessionDelegate()
+    })
+
+    await session.sendIncomingRelayLatency()
+
+    assert.equal(sent.length, 1)
+})
