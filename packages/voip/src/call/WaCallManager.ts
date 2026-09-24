@@ -300,6 +300,12 @@ export class WaCallManager extends EventEmitter {
         const session = this.resolveSessionFromNode(node)
         if (!session) return
         await session.handleCallAccept(node, peerJid)
+        // An incoming call picked up on another device of this account ends
+        // here (see `WaCallMediaSession.handleCallAccept`).
+        if (session.info.isEnded) {
+            this.calls.delete(session.callId)
+            await this.maybeUnblockWaitingCalls()
+        }
     }
 
     async handleCallPreaccept(node: BinaryNode, peerJid: string): Promise<void> {
@@ -359,7 +365,7 @@ export class WaCallManager extends EventEmitter {
             })
             return
         }
-        session.handleCallTerminate()
+        session.handleCallTerminate(action?.attrs?.reason)
         this.calls.delete(session.callId)
         await this.maybeUnblockWaitingCalls()
     }
