@@ -416,15 +416,9 @@ export class WaCallMediaSession {
         // Hold before yielding: the peer's `<mute_v2>` answering the accept must find it held.
         if (isVideo) this.holdBornVideoSend()
 
-        const peerBase = toUserJid(peerJid)
-        const participantPeers =
-            this.info.relayData?.participantJids?.filter(
-                (jid) => toUserJid(jid) === peerBase && /:\d+@/.test(jid)
-            ) || []
-        const participantPeerJid =
-            participantPeers.find((jid) => !/:0@/.test(jid)) || participantPeers[0]
-        this.acceptedByJid = participantPeerJid || peerJid
-        const acceptedPeerDeviceJid = this.ensureDeviceJid(this.acceptedByJid)
+        // The offer's sender (a bare jid is device 0), not a companion from participantJids.
+        const acceptedPeerDeviceJid = this.ensureDeviceJid(peerJid)
+        this.acceptedByJid = acceptedPeerDeviceJid
         this.peerAudioSsrc = this.ssrcOf(acceptedPeerDeviceJid)
         this.peerVideoStreamSsrcs = this.peerVideoStreamsOf(acceptedPeerDeviceJid)
         await this.publishSsrcsAndKeys(this.deriveKeys())
@@ -1090,6 +1084,10 @@ export class WaCallMediaSession {
         await this.publish({ relays: this.relaysSection() })
     }
 
+    /**
+     * Answers only for relays we hold, with our own latency: echoing the peer's `<te>`
+     * makes the caller elect a relay we are not on, and its media never arrives.
+     */
     async handleCallRelaylatency(node: BinaryNode, peerJid: string): Promise<void> {
         const nodeInfo = extractNodeInfo(node)
         if (!nodeInfo) return
@@ -1098,7 +1096,21 @@ export class WaCallMediaSession {
         const callId = inner.attrs?.['call-id'] || this.info.callId
         const callCreator = inner.attrs?.['call-creator'] || this.info.callCreator
 
-        const teNodes = getNodeChildrenByTag(inner, 'te')
+        const ownByName = new Map<string, RelayEndpoint>()
+        for (const ep of this.info.relayData?.endpoints ?? []) {
+            if (ep.relayName && !ownByName.has(ep.relayName)) ownByName.set(ep.relayName, ep)
+        }
+        const teNodes: BinaryNode[] = []
+        for (const te of getNodeChildrenByTag(inner, 'te')) {
+            const name = te.attrs?.relay_name
+            const own = name ? ownByName.get(name) : undefined
+            if (!name || !own) continue
+            teNodes.push({
+                tag: 'te',
+                attrs: { relay_name: name, latency: String(0x2000000 + (own.c2rRtt || 0)) },
+                content: own.addressBytes ?? te.content
+            })
+        }
 
         if (teNodes.length === 0) return
 
