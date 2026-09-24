@@ -88,14 +88,17 @@ function endpoint(overrides: Partial<RelayEndpoint> = {}): RelayEndpoint {
         token: 'TOKEN',
         key: 'RELAYKEY',
         relayId: 0,
+        rawToken: new Uint8Array([1, 2, 3]),
         ...overrides
     }
 }
 
 test('accepting subscribes to the calling device, not a companion of the peer', async () => {
+    // Companions ahead of the caller: neither "first listed" nor "first
+    // non-zero device" may be what decides.
     const { session, subscriptions } = createIncomingSession({
         endpoints: [],
-        participantJids: ['peer:0@lid', 'peer@lid', 'peer:34@lid', 'peer:39@lid']
+        participantJids: ['peer:34@lid', 'peer:39@lid', 'peer:0@lid', 'peer@lid']
     })
 
     await session.acceptCall()
@@ -124,6 +127,40 @@ test('relaylatency is answered only for our relays, with our latency and address
     assert.equal(te[0].attrs.relay_name, 'gru1c01')
     assert.equal(te[0].attrs.latency, String(LATENCY_BASE + 17))
     assert.deepEqual(te[0].content, ownAddress)
+})
+
+test('relaylatency never advertises a relay this client does not dial', async () => {
+    const address = new Uint8Array([10, 0, 0, 4, 0x0d, 0x96])
+    const { session, sent } = createIncomingSession({
+        endpoints: [
+            endpoint({ ip: '10.0.0.1', relayName: 'tcp1c01', protocol: 1, addressBytes: address }),
+            endpoint({
+                ip: '10.0.0.2',
+                relayName: 'semtoken',
+                rawToken: undefined,
+                addressBytes: address
+            }),
+            endpoint({ ip: '10.0.0.3', relayName: 'semendereco' }),
+            endpoint({ ip: '10.0.0.4', relayName: 'gru1c01', c2rRtt: 17, addressBytes: address })
+        ],
+        participantJids: ['peer:0@lid']
+    })
+
+    await session.handleCallRelaylatency(
+        relaylatencyNode([
+            { name: 'tcp1c01', latencyMs: 5 },
+            { name: 'semtoken', latencyMs: 5 },
+            { name: 'semendereco', latencyMs: 5 },
+            { name: 'gru1c01', latencyMs: 21 }
+        ]),
+        'peer@lid'
+    )
+
+    assert.equal(sent.length, 1)
+    assert.deepEqual(
+        teNodesOf(sent[0]).map((te) => te.attrs.relay_name),
+        ['gru1c01']
+    )
 })
 
 test('relaylatency naming only relays we were never given is not answered', async () => {
